@@ -5,34 +5,93 @@ import ast.nodes.*;
 import lexer.Lexer;
 import lexer.Token;
 import parser.Parser;
+import semantic.SemanticAnalyzer;
+import semantic.SemanticError;
 
 import java.util.List;
 
 public class Main {
 
     public static void main(String[] args) {
+        System.out.println("=== PROGRAMA VÁLIDO ===");
+        testValid();
+
+        System.out.println("\n=== ERROS SEMÂNTICOS ===");
+        testErrors();
+    }
+
+    static void testValid() {
         String source = """
                 int x;
                 int y;
+                bool flag;
                 x = 10;
                 y = x + 5;
-                if (y > 10) {
+                flag = y > 10;
+                if (flag) {
                     print(y);
                 } else {
                     print(0);
                 }
                 """;
 
-        Lexer lexer = new Lexer(source);
-        List<Token> tokens = lexer.tokenize();
-
-        Parser parser = new Parser(tokens);
-        ProgramNode program = parser.parse();
-
+        ProgramNode program = buildAST(source);
         printAST(program, 0);
+
+        SemanticAnalyzer analyzer = new SemanticAnalyzer();
+        analyzer.analyze(program);
+        System.out.println("Análise semântica: OK");
     }
 
-    // Impressão recursiva da AST com indentação
+    static void testErrors() {
+        // Caso 1: variável não declarada
+        runWithError("Variável não declarada:", """
+                int x;
+                y = 5;
+                """);
+
+        // Caso 2: tipo incompatível na atribuição
+        runWithError("Tipo incompatível:", """
+                int x;
+                bool b;
+                x = true;
+                """);
+
+        // Caso 3: condição do if não é bool
+        runWithError("Condição if não bool:", """
+                int x;
+                x = 1;
+                if (x) {
+                    print(x);
+                }
+                """);
+
+        // Caso 4: variável declarada duas vezes
+        runWithError("Declaração dupla:", """
+                int x;
+                int x;
+                """);
+    }
+
+    static void runWithError(String label, String source) {
+        try {
+            ProgramNode program = buildAST(source);
+            SemanticAnalyzer analyzer = new SemanticAnalyzer();
+            analyzer.analyze(program);
+            System.out.println(label + " ERRO — deveria ter falhado!");
+        } catch (SemanticError e) {
+            System.out.println(label + " OK → " + e.getMessage());
+        }
+    }
+
+    static ProgramNode buildAST(String source) {
+        Lexer lexer        = new Lexer(source);
+        List<Token> tokens = lexer.tokenize();
+        Parser parser      = new Parser(tokens);
+        return parser.parse();
+    }
+
+    // Impressão da AST (mantida da sessão anterior)
     static void printAST(Node node, int indent) {
         String pad = "  ".repeat(indent);
         switch (node) {
