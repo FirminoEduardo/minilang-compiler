@@ -2,25 +2,18 @@ package main;
 
 import ast.Node;
 import ast.nodes.*;
+import ir.IRGenerator;
+import ir.Instruction;
 import lexer.Lexer;
 import lexer.Token;
 import parser.Parser;
 import semantic.SemanticAnalyzer;
-import semantic.SemanticError;
 
 import java.util.List;
 
 public class Main {
 
     public static void main(String[] args) {
-        System.out.println("=== PROGRAMA VÁLIDO ===");
-        testValid();
-
-        System.out.println("\n=== ERROS SEMÂNTICOS ===");
-        testErrors();
-    }
-
-    static void testValid() {
         String source = """
                 int x;
                 int y;
@@ -33,65 +26,37 @@ public class Main {
                 } else {
                     print(0);
                 }
+                int i;
+                i = 1;
+                while (i < 4) {
+                    print(i);
+                    i = i + 1;
+                }
                 """;
 
-        ProgramNode program = buildAST(source);
-        printAST(program, 0);
+        // Fase A — Léxico
+        Lexer lexer        = new Lexer(source);
+        List<Token> tokens = lexer.tokenize();
 
+        // Fase B — Sintático
+        Parser parser       = new Parser(tokens);
+        ProgramNode program = parser.parse();
+
+        // Fase C — Semântico
         SemanticAnalyzer analyzer = new SemanticAnalyzer();
         analyzer.analyze(program);
-        System.out.println("Análise semântica: OK");
-    }
 
-    static void testErrors() {
-        // Caso 1: variável não declarada
-        runWithError("Variável não declarada:", """
-                int x;
-                y = 5;
-                """);
+        // Fase D — Geração de IR
+        IRGenerator irGen           = new IRGenerator();
+        List<Instruction> irCode    = irGen.generate(program);
 
-        // Caso 2: tipo incompatível na atribuição
-        runWithError("Tipo incompatível:", """
-                int x;
-                bool b;
-                x = true;
-                """);
-
-        // Caso 3: condição do if não é bool
-        runWithError("Condição if não bool:", """
-                int x;
-                x = 1;
-                if (x) {
-                    print(x);
-                }
-                """);
-
-        // Caso 4: variável declarada duas vezes
-        runWithError("Declaração dupla:", """
-                int x;
-                int x;
-                """);
-    }
-
-    static void runWithError(String label, String source) {
-        try {
-            ProgramNode program = buildAST(source);
-            SemanticAnalyzer analyzer = new SemanticAnalyzer();
-            analyzer.analyze(program);
-            System.out.println(label + " ERRO — deveria ter falhado!");
-        } catch (SemanticError e) {
-            System.out.println(label + " OK → " + e.getMessage());
+        System.out.println("=== CÓDIGO INTERMEDIÁRIO (TAC) ===");
+        for (int i = 0; i < irCode.size(); i++) {
+            System.out.printf("%3d:  %s%n", i, irCode.get(i));
         }
     }
 
-    static ProgramNode buildAST(String source) {
-        Lexer lexer        = new Lexer(source);
-        List<Token> tokens = lexer.tokenize();
-        Parser parser      = new Parser(tokens);
-        return parser.parse();
-    }
-
-    // Impressão da AST (mantida da sessão anterior)
+    // printAST mantido para referência (pode ser removido se preferir)
     static void printAST(Node node, int indent) {
         String pad = "  ".repeat(indent);
         switch (node) {
@@ -136,10 +101,10 @@ public class Main {
                 System.out.println(pad + "UnaryOp: " + u.operator);
                 printAST(u.operand, indent + 1);
             }
-            case NumberNode n     -> System.out.println(pad + "Number: " + n.value);
-            case BoolNode   b     -> System.out.println(pad + "Bool: "   + b.value);
-            case StringNode s     -> System.out.println(pad + "String: " + s.value);
-            case IdentifierNode i -> System.out.println(pad + "Ident: "  + i.name);
+            case NumberNode n     -> System.out.println(pad + "Number: "  + n.value);
+            case BoolNode   b     -> System.out.println(pad + "Bool: "    + b.value);
+            case StringNode s     -> System.out.println(pad + "String: "  + s.value);
+            case IdentifierNode i -> System.out.println(pad + "Ident: "   + i.name);
             default -> System.out.println(pad + "? " + node.getClass().getSimpleName());
         }
     }
