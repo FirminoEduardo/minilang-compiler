@@ -9,21 +9,148 @@ import lexer.Lexer;
 import lexer.Token;
 import parser.Parser;
 import semantic.SemanticAnalyzer;
-import semantic.SemanticError;
 import vm.VirtualMachine;
 
 import java.util.List;
+import java.util.Scanner;
 
 public class Main {
 
+    // Scanner compartilhado entre Main e VirtualMachine
+    static final Scanner input = new Scanner(System.in);
+
     public static void main(String[] args) {
+        printBanner();
+        boolean rodando = true;
+        while (rodando) {
+            printMenu();
+            String opcao = input.nextLine().trim();
+            switch (opcao) {
+                case "1" -> modoInterativo();
+                case "2" -> modoBateriaCompleta();
+                case "0" -> { rodando = false; System.out.println("\n  Encerrando.\n"); }
+                default  -> System.out.println("\n  Opção inválida. Tente novamente.\n");
+            }
+        }
+    }
+
+    // -------------------------------------------------------
+    // Modo interativo — professora digita o programa
+    // -------------------------------------------------------
+
+    static void modoInterativo() {
+        System.out.println();
+        System.out.println("╔══════════════════════════════════════════╗");
+        System.out.println("║         MODO INTERATIVO                  ║");
+        System.out.println("╚══════════════════════════════════════════╝");
+        System.out.println("  Digite o programa MiniLang linha a linha.");
+        System.out.println("  Finalize com uma linha em branco.\n");
+
+        StringBuilder sb = new StringBuilder();
+        while (input.hasNextLine()) {
+            String linha = input.nextLine();
+            if (linha.isEmpty()) break;
+            sb.append(linha).append("\n");
+        }
+
+        String source = sb.toString().trim();
+        if (source.isEmpty()) {
+            System.out.println("\n  Nenhum programa digitado.\n");
+            return;
+        }
+
+        System.out.println("\n  ─────────────────────────────────────────");
+        compilarEExecutar(source);
+        System.out.println("  ─────────────────────────────────────────\n");
+    }
+
+    // -------------------------------------------------------
+    // Compilar e executar com relatório fase a fase
+    // -------------------------------------------------------
+
+    static void compilarEExecutar(String source) {
+        // Fase 1 — Léxico
+        List<Token> tokens;
+        try {
+            tokens = new Lexer(source).tokenize();
+            System.out.println("  ✓ Análise léxica    — OK");
+        } catch (Exception e) {
+            System.out.println("  ✗ Análise léxica    — ERRO: " + e.getMessage());
+            imprimirResultado(false);
+            return;
+        }
+
+        // Fase 2 — Sintático
+        ProgramNode program;
+        try {
+            program = new Parser(tokens).parse();
+            System.out.println("  ✓ Análise sintática — OK");
+        } catch (Exception e) {
+            System.out.println("  ✗ Análise sintática — ERRO: " + e.getMessage());
+            imprimirResultado(false);
+            return;
+        }
+
+        // Fase 3 — Semântico
+        try {
+            new SemanticAnalyzer().analyze(program);
+            System.out.println("  ✓ Análise semântica — OK");
+        } catch (Exception e) {
+            System.out.println("  ✗ Análise semântica — ERRO: " + e.getMessage());
+            imprimirResultado(false);
+            return;
+        }
+
+        // Fase 4 + 5 — IR e Bytecode
+        List<BytecodeInstruction> bc;
+        try {
+            List<Instruction> tac = new IRGenerator().generate(program);
+            bc = new BytecodeGenerator().generate(tac);
+            System.out.println("  ✓ Geração de código — OK");
+        } catch (Exception e) {
+            System.out.println("  ✗ Geração de código — ERRO: " + e.getMessage());
+            imprimirResultado(false);
+            return;
+        }
+
+        // Fase 6 — Execução
+        imprimirResultado(true);
+        System.out.println("  ── Saída da execução ──\n");
+        try {
+            new VirtualMachine(bc, input).run();
+        } catch (Exception e) {
+            System.out.println("\n  ✗ Erro em tempo de execução: " + e.getMessage());
+        }
+        System.out.println();
+    }
+
+    static void imprimirResultado(boolean aceito) {
+        System.out.println();
+        if (aceito) {
+            System.out.println("  ╔════════════════╗");
+            System.out.println("  ║  ✓  ACEITO     ║");
+            System.out.println("  ╚════════════════╝");
+        } else {
+            System.out.println("  ╔════════════════╗");
+            System.out.println("  ║  ✗  REJEITADO  ║");
+            System.out.println("  ╚════════════════╝");
+        }
+        System.out.println();
+    }
+
+    // -------------------------------------------------------
+    // Modo bateria — roda os 12 testes automaticamente
+    // -------------------------------------------------------
+
+    static void modoBateriaCompleta() {
+        System.out.println();
         System.out.println("╔══════════════════════════════════════════╗");
         System.out.println("║     MiniLang Compiler — Testes Finais    ║");
         System.out.println("╚══════════════════════════════════════════╝\n");
-
         testeLexicoSintatico();
         testeSemantico();
         testeExecucao();
+        System.out.println();
     }
 
     // -------------------------------------------------------
@@ -33,7 +160,6 @@ public class Main {
     static void testeLexicoSintatico() {
         printHeader("CRITÉRIO 1 — LÉXICO E SINTÁTICO");
 
-        // Programa válido complexo
         runTest("Programa válido (aceita)", """
                 int x;
                 bool flag;
@@ -46,25 +172,21 @@ public class Main {
                 }
                 """, true);
 
-        // Símbolo inválido
         runTest("Símbolo inválido '@' (rejeita)", """
                 int x;
                 x = @5;
                 """, false);
 
-        // Falta ponto-e-vírgula
         runTest("Falta ';' (rejeita)", """
                 int x
                 x = 5;
                 """, false);
 
-        // Expressão incompleta
         runTest("Expressão incompleta 'x = 5 +' (rejeita)", """
                 int x;
                 x = 5 +;
                 """, false);
 
-        // Bloco não fechado
         runTest("Bloco não fechado (rejeita)", """
                 int x;
                 x = 1;
@@ -134,7 +256,6 @@ public class Main {
     static void testeExecucao() {
         printHeader("CRITÉRIO 3 — EXECUÇÃO");
 
-        // Fatorial de 5 → 120
         runAndExecute("Fatorial de 5 (esperado: 120)", """
                 int n;
                 int result;
@@ -147,7 +268,6 @@ public class Main {
                 print(result);
                 """);
 
-        // Soma de 1 a 5 → 15
         runAndExecute("Soma 1 a 5 (esperado: 15)", """
                 int i;
                 int soma;
@@ -160,7 +280,6 @@ public class Main {
                 print(soma);
                 """);
 
-        // If/else com operador lógico
         runAndExecute("If/else aninhado (esperado: 1)", """
                 int x;
                 int y;
@@ -175,7 +294,6 @@ public class Main {
                 }
                 """);
 
-        // Expressão com múltiplos operadores
         runAndExecute("Expressão composta — precedência * antes de + (esperado: 14)", """
                 int a;
                 int b;
@@ -212,12 +330,12 @@ public class Main {
     static void runAndExecute(String label, String source) {
         System.out.println("\n  → " + label);
         try {
-            ProgramNode program              = buildAST(source);
+            ProgramNode program          = buildAST(source);
             new SemanticAnalyzer().analyze(program);
-            List<Instruction> tac            = new IRGenerator().generate(program);
-            List<BytecodeInstruction> bc     = new BytecodeGenerator().generate(tac);
+            List<Instruction> tac        = new IRGenerator().generate(program);
+            List<BytecodeInstruction> bc = new BytecodeGenerator().generate(tac);
             System.out.print("    Saída: ");
-            new VirtualMachine(bc).run();
+            new VirtualMachine(bc, input).run();
         } catch (Exception e) {
             System.out.println("    ERRO: " + e.getMessage());
         }
@@ -226,6 +344,26 @@ public class Main {
     static ProgramNode buildAST(String source) {
         List<Token> tokens = new Lexer(source).tokenize();
         return new Parser(tokens).parse();
+    }
+
+    // -------------------------------------------------------
+    // Banner e menu
+    // -------------------------------------------------------
+
+    static void printBanner() {
+        System.out.println("╔══════════════════════════════════════════╗");
+        System.out.println("║        COMPILADOR MINILANG               ║");
+        System.out.println("║      Projeto de Compiladores             ║");
+        System.out.println("╚══════════════════════════════════════════╝\n");
+    }
+
+    static void printMenu() {
+        System.out.println("  ┌──────────────────────────────────────┐");
+        System.out.println("  │  1. Digitar programa                 │");
+        System.out.println("  │  2. Executar bateria de testes       │");
+        System.out.println("  │  0. Sair                             │");
+        System.out.println("  └──────────────────────────────────────┘");
+        System.out.print("  Opção: ");
     }
 
     static void printHeader(String title) {
