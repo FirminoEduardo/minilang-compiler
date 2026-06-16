@@ -13,10 +13,19 @@ public class VirtualMachine {
     private final Map<String, Integer>      labelIndex = new HashMap<>();
     private int pc = 0;
 
-    private final Scanner scanner = new Scanner(System.in);
+    private final Scanner scanner;
 
+    // Construtor padrão — cria Scanner próprio (usado pela bateria de testes)
     public VirtualMachine(List<BytecodeInstruction> bytecode) {
         this.bytecode = bytecode;
+        this.scanner  = new Scanner(System.in);
+        buildLabelIndex();
+    }
+
+    // Construtor com Scanner externo — evita conflito quando Main também lê stdin
+    public VirtualMachine(List<BytecodeInstruction> bytecode, Scanner scanner) {
+        this.bytecode = bytecode;
+        this.scanner  = scanner;
         buildLabelIndex();
     }
 
@@ -79,14 +88,14 @@ public class VirtualMachine {
 
                 case READ  -> {
                     System.out.print(">>> leia " + instr.operand + ": ");
-                    String input = scanner.nextLine().trim();
+                    String line = scanner.nextLine().trim();
                     try {
-                        memory.put(instr.operand, Integer.parseInt(input));
+                        memory.put(instr.operand, Integer.parseInt(line));
                     } catch (NumberFormatException e) {
-                        if (input.equals("true") || input.equals("false")) {
-                            memory.put(instr.operand, Boolean.parseBoolean(input));
+                        if (line.equals("true") || line.equals("false")) {
+                            memory.put(instr.operand, Boolean.parseBoolean(line));
                         } else {
-                            memory.put(instr.operand, input);
+                            memory.put(instr.operand, line);
                         }
                     }
                 }
